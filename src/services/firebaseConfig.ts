@@ -1,15 +1,19 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, FacebookAuthProvider } from 'firebase/auth';
+import { initializeApp, getApps, getApp } from "firebase/app";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  FacebookAuthProvider,
+} from "firebase/auth";
 
 // TODO: Replace with your actual Firebase configuration
 // You can get this from the Firebase Console -> Project Settings
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDummyKeyForVibeCoding_ReplaceMe",
+  apiKey: "AIzaSyDummyKeyForVibeCoding_ReplaceMe",
   authDomain: "suicloud-demo.firebaseapp.com",
   projectId: "suicloud-demo",
   storageBucket: "suicloud-demo.appspot.com",
   messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  appId: "1:123456789:web:abcdef",
 };
 
 // Initialize Firebase only once
