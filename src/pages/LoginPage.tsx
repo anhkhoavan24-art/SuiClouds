@@ -59,7 +59,7 @@ const LoginPage: React.FC = () => {
 
           <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-500">
             <Shield className="h-3 w-3" />
-            <span>Secured by Firebase & Walrus Protocol</span>
+            <span>Secured by zkLogin & Sui Network</span>
           </div>
         </div>
       </div>

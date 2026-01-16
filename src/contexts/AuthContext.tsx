@@ -1,22 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  signOut, 
-  User, 
-  GoogleAuthProvider,
-  FacebookAuthProvider
-} from 'firebase/auth';
-import { auth, googleProvider, facebookProvider } from '../services/firebaseConfig';
 import { UserProfile } from '../types';
+import { 
+  initiateGoogleLogin, 
+  extractJWTFromUrl, 
+  decodeJWT, 
+  validateNonce, 
+  clearZkLoginSession 
+} from '../services/zkLoginService';
 
 interface AuthContextType {
   currentUser: UserProfile | null;
   loginWithGoogle: () => Promise<void>;
-  loginWithFacebook: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
-  mockLogin: () => void; // For demo purposes only
+  mockLogin: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,83 +30,85 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Monitor Firebase Auth State
+  // Check for stored zkLogin user and handle OAuth callback
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
-      if (user) {
-        setCurrentUser({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL
-        });
-      } else {
-        // Only set to null if we haven't manually mocked a login (for demo resilience)
-        if (!localStorage.getItem('sui_demo_user')) {
-            setCurrentUser(null);
-        }
-      }
+    // Check if user is already logged in
+    const storedUser = localStorage.getItem('zklogin_user');
+    if (storedUser) {
+      setCurrentUser(JSON.parse(storedUser));
       setLoading(false);
-    });
-
-    // Check for mock user (Development Fallback if Firebase keys are missing/invalid)
-    const mockUser = localStorage.getItem('sui_demo_user');
-    if (mockUser) {
-        setCurrentUser(JSON.parse(mockUser));
-        setLoading(false);
+      return;
     }
 
-    return unsubscribe;
+    // Handle OAuth callback after redirect from Google
+    const jwt = extractJWTFromUrl();
+    if (jwt) {
+      const jwtPayload = decodeJWT(jwt);
+      
+      if (jwtPayload && validateNonce(jwtPayload)) {
+        // Store JWT and user info
+        sessionStorage.setItem('zklogin_jwt', jwt);
+        
+        const zkLoginUser: UserProfile = {
+          uid: jwtPayload.sub, // Subject claim is unique identifier
+          email: jwtPayload.email || null,
+          displayName: jwtPayload.name || null,
+          photoURL: jwtPayload.picture || null,
+        };
+        
+        localStorage.setItem('zklogin_user', JSON.stringify(zkLoginUser));
+        setCurrentUser(zkLoginUser);
+        
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        console.error('JWT validation failed or nonce mismatch');
+        clearZkLoginSession();
+      }
+    }
+    
+    setLoading(false);
   }, []);
 
   const loginWithGoogle = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      await initiateGoogleLogin();
+      // Note: Page will redirect to Google, so this function effectively pauses here
     } catch (error) {
-      console.error("Google Login Failed:", error);
-      alert("Firebase Config Missing or Invalid. Using Demo Login.");
+      console.error("zkLogin Google Login Failed:", error);
+      alert("zkLogin authentication failed. Using Demo Login.");
       mockLogin();
-    }
-  };
-
-  const loginWithFacebook = async () => {
-    try {
-      await signInWithPopup(auth, facebookProvider);
-    } catch (error) {
-        console.error("Facebook Login Failed:", error);
-        mockLogin();
     }
   };
 
   const logout = async () => {
     try {
-      await signOut(auth);
-      localStorage.removeItem('sui_demo_user');
+      clearZkLoginSession();
+      localStorage.removeItem('zklogin_user');
       setCurrentUser(null);
     } catch (error) {
       console.error("Logout Failed", error);
     }
   };
 
-  // Vibe Coding: Allow instant access if keys aren't set up
+  // Demo login fallback
   const mockLogin = () => {
-      const demoUser: UserProfile = {
-          uid: 'demo-123',
-          email: 'demo@suicloud.io',
-          displayName: 'Demo User',
-          photoURL: 'https://picsum.photos/200'
-      };
-      localStorage.setItem('sui_demo_user', JSON.stringify(demoUser));
-      setCurrentUser(demoUser);
+    const demoUser: UserProfile = {
+      uid: 'demo-123',
+      email: 'demo@suicloud.io',
+      displayName: 'Demo User',
+      photoURL: 'https://picsum.photos/200',
+    };
+    localStorage.setItem('zklogin_user', JSON.stringify(demoUser));
+    setCurrentUser(demoUser);
   };
 
   const value = {
     currentUser,
     loginWithGoogle,
-    loginWithFacebook,
     logout,
     loading,
-    mockLogin
+    mockLogin,
   };
 
   return (
