@@ -1,17 +1,17 @@
 import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/router';
 import { useAuth } from '../contexts/AuthContext';
 import { Cloud, Lock, Shield } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const { loginWithGoogle, currentUser, mockLogin } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
 
   useEffect(() => {
     if (currentUser) {
-      navigate('/');
+      router.push('/');
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, router]);
 
   return (
     <div className="flex h-full w-full items-center justify-center p-4">

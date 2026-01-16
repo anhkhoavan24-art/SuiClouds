@@ -4,7 +4,7 @@ import { getAuth, GoogleAuthProvider, FacebookAuthProvider } from 'firebase/auth
 // TODO: Replace with your actual Firebase configuration
 // You can get this from the Firebase Console -> Project Settings
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "AIzaSyDummyKeyForVibeCoding_ReplaceMe",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDummyKeyForVibeCoding_ReplaceMe",
   authDomain: "suicloud-demo.firebaseapp.com",
   projectId: "suicloud-demo",
   storageBucket: "suicloud-demo.appspot.com",
