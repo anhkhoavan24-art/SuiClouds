@@ -20,6 +20,9 @@ export interface StoredFile {
   type: FileType;
   uploadDate: Date;
   url?: string; // For display purposes
+  starred?: boolean;
+  trashed?: boolean;
+  accessedAt?: Date;
 }
 
 export interface UploadProgress {

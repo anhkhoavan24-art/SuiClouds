@@ -1,26 +1,29 @@
-import React from 'react';
-import { 
-  Cloud, 
-  HardDrive, 
-  Clock, 
-  Star, 
-  Trash2, 
-  Settings, 
+import React from "react";
+import {
+  Cloud,
+  HardDrive,
+  Clock,
+  Star,
+  Trash2,
+  Settings,
   LogOut,
-  Plus
-} from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+  Plus,
+} from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
-const Sidebar: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => {
+const navItems = [
+  { icon: HardDrive, key: "mydrive", label: "My Drive" },
+  { icon: Clock, key: "recent", label: "Recent" },
+  { icon: Star, key: "starred", label: "Starred" },
+  { icon: Trash2, key: "trash", label: "Trash" },
+];
+
+const Sidebar: React.FC<{
+  onUploadClick: () => void;
+  currentView: string;
+  onNavigate: (view: string) => void;
+}> = ({ onUploadClick, currentView, onNavigate }) => {
   const { logout } = useAuth();
-  
-  const navItems = [
-    { icon: HardDrive, label: 'My Drive', active: true },
-    { icon: Clock, label: 'Recent', active: false },
-    { icon: Star, label: 'Starred', active: false },
-    { icon: Trash2, label: 'Trash', active: false },
-  ];
-
   return (
     <div className="hidden h-full w-64 flex-col justify-between border-r border-white/20 bg-white/20 backdrop-blur-xl md:flex">
       <div className="p-6">
@@ -28,10 +31,12 @@ const Sidebar: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => 
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sui-500 to-sui-700 text-white shadow-md">
             <Cloud className="h-5 w-5" />
           </div>
-          <span className="text-xl font-bold tracking-tight text-slate-800">SuiCloud</span>
+          <span className="text-xl font-bold tracking-tight text-slate-800">
+            SuiCloud
+          </span>
         </div>
 
-        <button 
+        <button
           onClick={onUploadClick}
           className="mb-8 flex w-full items-center justify-center gap-2 rounded-xl bg-white/60 py-3 text-sm font-semibold text-sui-700 shadow-sm transition-all hover:bg-white hover:shadow-md active:scale-95"
         >
@@ -40,19 +45,26 @@ const Sidebar: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => 
         </button>
 
         <nav className="space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item.label}
-              className={`flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                item.active 
-                  ? 'bg-sui-100/50 text-sui-800' 
-                  : 'text-slate-600 hover:bg-white/30 hover:text-slate-900'
-              }`}
-            >
-              <item.icon className={`h-4 w-4 ${item.active ? 'text-sui-600' : 'text-slate-500'}`} />
-              {item.label}
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const active = currentView === item.key;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                onClick={() => onNavigate(item.key)}
+                className={`flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-sui-100/50 text-sui-800"
+                    : "text-slate-600 hover:bg-white/30 hover:text-slate-900"
+                }`}
+              >
+                <Icon
+                  className={`h-4 w-4 ${active ? "text-sui-600" : "text-slate-500"}`}
+                />
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
@@ -69,11 +81,11 @@ const Sidebar: React.FC<{ onUploadClick: () => void }> = ({ onUploadClick }) => 
         </div>
 
         <div className="space-y-1 border-t border-white/20 pt-4">
-           <button className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-white/30 hover:text-slate-900">
+          <button className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-white/30 hover:text-slate-900">
             <Settings className="h-4 w-4 text-slate-500" />
             Settings
           </button>
-          <button 
+          <button
             onClick={() => logout()}
             className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50/50"
           >

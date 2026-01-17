@@ -62,3 +62,19 @@ export const getWalrusUrl = (blobId: string): string => {
   }
   return `${WALRUS_AGGREGATOR_URL}/v1/${blobId}`;
 };
+
+/**
+ * Permanently deletes a blob from Walrus by its blobId.
+ * Returns true when deletion was successful or the request was sent.
+ * Falls back to false on error (network or API issues).
+ */
+export const deleteFromWalrus = async (blobId: string): Promise<boolean> => {
+  try {
+    // Many restful stores accept DELETE to the store endpoint
+    await axios.delete(`${WALRUS_PUBLISHER_URL}/v1/store/${blobId}`);
+    return true;
+  } catch (err) {
+    console.warn('Failed to delete blob from Walrus:', err);
+    return false;
+  }
+};
