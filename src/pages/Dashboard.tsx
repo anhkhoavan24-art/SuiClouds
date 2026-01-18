@@ -4,7 +4,11 @@ import FileGrid from "../components/FileGrid";
 import { useAuth } from "../contexts/AuthContext";
 import { Search, Bell, UploadCloud } from "lucide-react";
 import { StoredFile, FileType } from "../types";
-import { uploadToWalrus, getWalrusUrl, deleteFromWalrus } from "../services/walrusService";
+import {
+  uploadToWalrus,
+  getWalrusUrl,
+  deleteFromWalrus,
+} from "../services/walrusService";
 
 // Mock initial data
 const INITIAL_FILES: StoredFile[] = [
@@ -237,7 +241,7 @@ const Dashboard: React.FC = () => {
               if (!target) return;
 
               const confirmed = window.confirm(
-                'Permanently delete this file? This action cannot be undone.'
+                "Permanently delete this file? This action cannot be undone.",
               );
               if (!confirmed) return;
 
@@ -247,7 +251,7 @@ const Dashboard: React.FC = () => {
                   await deleteFromWalrus(target.blobId);
                 }
               } catch (err) {
-                console.warn('Permanent delete failed at network level', err);
+                console.warn("Permanent delete failed at network level", err);
               }
 
               setFiles((prev) => prev.filter((f) => f.id !== id));

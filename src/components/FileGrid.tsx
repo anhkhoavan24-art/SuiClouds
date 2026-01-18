@@ -105,7 +105,7 @@ const FileGrid: React.FC<FileGridProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       const ok = window.confirm(
-                        'Permanently delete this file? This cannot be undone.'
+                        "Permanently delete this file? This cannot be undone.",
                       );
                       if (!ok) return;
                       onDeletePermanent && onDeletePermanent(file.id);
