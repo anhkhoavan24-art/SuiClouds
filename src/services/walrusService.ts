@@ -104,10 +104,142 @@ export const getRelayPriceQuote = async (sizeBytes: number, epochs = 1) => {
 };
 
 /**
+ * Create an approachable bundle of pricing packages for a given size/epochs.
+ * Tries the relay price endpoints and falls back to simple USD-per-MB heuristics.
+ * Returns an array of packages like { key, name, priceUSD, totalUSD, description }.
+ */
+export const makePriceBundle = async (sizeBytes: number, epochs = 1) => {
+  // Try relay pricing first
+  try {
+    const quote = await getRelayPriceQuote(sizeBytes, epochs);
+    if (quote) {
+      // If relay returns structured tiers, map to simple bundle format
+      // Common fields might include pricePerEpoch, total, currency. We defensively map.
+      if (Array.isArray(quote.tiers) && quote.tiers.length) {
+        return quote.tiers.map((t: any) => ({
+          key: t.name || t.id || String(t.price || Math.random()),
+          name: t.name || 'Plan',
+          priceUSD: t.price_usd ?? t.price ?? null,
+          totalUSD: (t.price_usd ?? t.price ?? 0) * 1,
+          description: t.description || '',
+        }));
+      }
+      // Some relays return a simple price field
+      if (quote.price || quote.total) {
+        const p = quote.price ?? quote.total;
+        return [
+          { key: 'relay', name: 'Relay Price', priceUSD: p, totalUSD: p, description: 'Price from relay.wal.app' },
+        ];
+      }
+    }
+  } catch (e) {
+    // ignore and fallback
+  }
+
+  // Fallback heuristic: price per MB per epoch in USD (approachable bundles)
+  const mb = Math.max(1, Math.ceil(sizeBytes / 1024 / 1024));
+  const basicPerMb = 0.01; // $0.01 / MB / epoch
+  const standardPerMb = 0.02;
+  const proPerMb = 0.05;
+
+  const basicTotal = Number((mb * basicPerMb * epochs).toFixed(4));
+  const standardTotal = Number((mb * standardPerMb * epochs).toFixed(4));
+  const proTotal = Number((mb * proPerMb * epochs).toFixed(4));
+
+  return [
+    { key: 'basic', name: 'Basic', priceUSD: basicPerMb, totalUSD: basicTotal, description: `Approx ${basicPerMb}$/MB/epoch` },
+    { key: 'standard', name: 'Standard', priceUSD: standardPerMb, totalUSD: standardTotal, description: `Approx ${standardPerMb}$/MB/epoch` },
+    { key: 'pro', name: 'Pro', priceUSD: proPerMb, totalUSD: proTotal, description: `Approx ${proPerMb}$/MB/epoch` },
+  ];
+};
+
+// Cache for SUI price
+let _cachedSuiUsd: number | null = null;
+let _suiPriceFetchedAt = 0;
+
+/**
+ * Fetch SUI price in USD (CoinGecko). Cache briefly to avoid repeated network calls.
+ * Returns number (USD per SUI) or null on failure.
+ */
+export const getSuiUsdPrice = async (): Promise<number | null> => {
+  const now = Date.now();
+  if (_cachedSuiUsd && now - _suiPriceFetchedAt < 60_000) return _cachedSuiUsd;
+  try {
+    const res = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd');
+    const val = res?.data?.sui?.usd;
+    if (typeof val === 'number') {
+      _cachedSuiUsd = val;
+      _suiPriceFetchedAt = now;
+      return val;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+};
+
+/**
+ * Build a simulated transaction object describing an upload flow for the UI.
+ * The returned object includes a friendly package selection and step breakdown.
+ */
+export const simulateUploadTransaction = async (sizeBytes: number, opts?: { epochs?: number }) => {
+  const epochs = opts?.epochs ?? 1;
+  const bundles = await makePriceBundle(sizeBytes, epochs);
+
+  // Pick a default recommended package (Standard)
+  const recommended = bundles.find((b: any) => b.key === 'standard') ?? bundles[0];
+
+  const tx = {
+    id: `sim-${Date.now().toString(36)}`,
+    createdAt: new Date().toISOString(),
+    sizeBytes,
+    sizeMB: Math.max(1, Math.ceil(sizeBytes / 1024 / 1024)),
+    epochs,
+    bundles,
+    recommended,
+    steps: [
+      { step: 'encode', description: 'Encode file, compute multihash, prepare chunks', feeUSD: 0 },
+      { step: 'register', description: 'Register upload intent on relay (optional on-chain step)', feeUSD: Number((recommended.totalUSD * 0.3).toFixed(4)) },
+      { step: 'upload', description: 'Upload content to walrus publishers/aggregators', feeUSD: Number((recommended.totalUSD * 0.6).toFixed(4)) },
+      { step: 'certify', description: 'Certify the file; finalization step', feeUSD: Number((recommended.totalUSD * 0.1).toFixed(4)) },
+    ],
+    totalEstimatedUSD: Number((recommended.totalUSD).toFixed(4)),
+    // SUI equivalents will be filled below when possible
+    totalEstimatedSUI: null as number | null,
+    bundlesWithSui: [] as any[],
+  };
+
+  // Try to compute SUI equivalents
+  try {
+    const suiUsd = await getSuiUsdPrice();
+    if (suiUsd && suiUsd > 0) {
+      const bundlesWithSui = (tx.bundles as any[]).map((b: any) => ({
+        ...b,
+        priceSui: b.priceUSD != null ? Number((b.priceUSD / suiUsd).toFixed(6)) : null,
+        totalSui: b.totalUSD != null ? Number((b.totalUSD / suiUsd).toFixed(6)) : null,
+      }));
+      tx.bundles = bundlesWithSui;
+      tx.bundlesWithSui = bundlesWithSui;
+      tx.totalEstimatedSUI = tx.totalEstimatedUSD ? Number((tx.totalEstimatedUSD / suiUsd).toFixed(6)) : null;
+      // convert step fees to SUI where applicable
+      tx.steps = tx.steps.map((s: any) => ({
+        ...s,
+        feeSUI: s.feeUSD != null ? Number((s.feeUSD / suiUsd).toFixed(6)) : null,
+      }));
+      tx.recommended = { ...tx.recommended, totalSui: tx.recommended.totalUSD != null ? Number((tx.recommended.totalUSD / suiUsd).toFixed(6)) : null };
+    }
+  } catch (e) {
+    // ignore conversion failures; USD values remain
+  }
+
+  return tx;
+};
+
+/**
  * Try to upload via the user-facing relay endpoints. Returns { blobId, details } on success.
  * Tries a few plausible upload endpoints and falls back to null when unavailable.
  */
-export const uploadToRelay = async (input: File | Blob | Uint8Array | string, opts?: { epochs?: number; identifier?: string; signerAddress?: string }) => {
+export const uploadToRelay = async (input: File | Blob | Uint8Array | string, opts?: { epochs?: number; identifier?: string; signerAddress?: string; plan?: string }) => {
   const candidates = [`${WALRUS_RELAY_URL}/v1/upload`, `${WALRUS_RELAY_URL}/v1/store`, `${WALRUS_RELAY_URL}/upload`];
 
   // normalize body
@@ -119,6 +251,7 @@ export const uploadToRelay = async (input: File | Blob | Uint8Array | string, op
       form.append('file', body as Blob);
       if (opts?.epochs) form.append('epochs', String(opts.epochs));
       if (opts?.identifier) form.append('identifier', opts.identifier);
+      if (opts?.plan) form.append('plan', opts.plan);
       if (opts?.signerAddress) form.append('signerAddress', opts.signerAddress);
 
       const res = await axios.post(url, form, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -149,7 +282,7 @@ export const uploadToRelay = async (input: File | Blob | Uint8Array | string, op
  */
 export const uploadToWalrus = async (
   input: File | Blob | Uint8Array | string | any,
-  opts?: { identifier?: string; tags?: Record<string, string>; epochs?: number; deletable?: boolean; signer?: any },
+  opts?: { identifier?: string; tags?: Record<string, string>; epochs?: number; deletable?: boolean; signer?: any; plan?: string },
 ): Promise<string> => {
   // If user passed a WalrusFile already, use it; otherwise construct
   const { WalrusFile, RetryableWalrusClientError } = await import('@mysten/walrus');
@@ -179,7 +312,8 @@ export const uploadToWalrus = async (
   // Fallback: publisher PUT (no signer required) — keep original behaviour for demo/webflow
   try {
     const body = input instanceof Blob || input instanceof File ? input : new Blob([input as any]);
-    const response = await axios.put(`${WALRUS_PUBLISHER_URL}/v1/store?epochs=${opts?.epochs ?? 1}`, body, {
+    const planQuery = opts?.plan ? `&plan=${encodeURIComponent(opts.plan)}` : '';
+    const response = await axios.put(`${WALRUS_PUBLISHER_URL}/v1/store?epochs=${opts?.epochs ?? 1}${planQuery}`, body, {
       headers: {
         'Content-Type': (body as Blob).type || 'application/octet-stream',
       },
