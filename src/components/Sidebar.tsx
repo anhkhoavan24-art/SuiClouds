@@ -25,23 +25,23 @@ const Sidebar: React.FC<{
 }> = ({ onUploadClick, currentView, onNavigate }) => {
   const { logout } = useAuth();
   return (
-    <div className="hidden h-full w-64 flex-col justify-between border-r border-white/20 bg-white/20 backdrop-blur-xl md:flex">
+    <div className="hidden h-full w-48 flex-col justify-between border-r border-gray-100 bg-white/10 md:flex">
       <div className="p-6">
-        <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sui-500 to-sui-700 text-white shadow-md">
-            <Cloud className="h-5 w-5" />
+        <div className="mb-6 flex items-center gap-3 px-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-sui-600 text-white">
+            <Cloud className="h-4 w-4" />
           </div>
-          <span className="text-xl font-bold tracking-tight text-slate-800">
+          <span className="text-lg font-semibold tracking-tight text-slate-800 hidden md:block">
             SuiCloud
           </span>
         </div>
 
         <button
           onClick={onUploadClick}
-          className="mb-8 flex w-full items-center justify-center gap-2 rounded-xl bg-white/60 py-3 text-sm font-semibold text-sui-700 shadow-sm transition-all hover:bg-white hover:shadow-md active:scale-95"
+          className="mb-6 flex w-full items-center justify-center gap-2 rounded-md bg-white/90 py-2 text-sm font-medium text-sui-700 transition-colors"
         >
-          <Plus className="h-5 w-5" />
-          <span>New Upload</span>
+          <Plus className="h-4 w-4" />
+          <span className="hidden md:inline">Upload</span>
         </button>
 
         <nav className="space-y-1">
@@ -52,7 +52,7 @@ const Sidebar: React.FC<{
               <button
                 key={item.key}
                 onClick={() => onNavigate(item.key)}
-                className={`flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   active
                     ? "bg-sui-100/50 text-sui-800"
                     : "text-slate-600 hover:bg-white/30 hover:text-slate-900"
@@ -61,7 +61,7 @@ const Sidebar: React.FC<{
                 <Icon
                   className={`h-4 w-4 ${active ? "text-sui-600" : "text-slate-500"}`}
                 />
-                {item.label}
+                <span className="hidden md:inline">{item.label}</span>
               </button>
             );
           })}
@@ -69,18 +69,14 @@ const Sidebar: React.FC<{
       </div>
 
       <div className="p-6">
-        <div className="mb-4 rounded-xl bg-sui-50/50 p-4">
-          <div className="mb-2 flex justify-between text-xs font-medium text-slate-500">
+        <div className="mb-4 p-2 text-sm text-slate-600">
+          <div className="flex items-center justify-between text-xs text-slate-500">
             <span>Storage</span>
-            <span>75% used</span>
+            <span>75%</span>
           </div>
-          <div className="h-1.5 w-full rounded-full bg-sui-200">
-            <div className="h-1.5 w-3/4 rounded-full bg-sui-500"></div>
-          </div>
-          <div className="mt-2 text-xs text-slate-400">15 GB of 20 GB used</div>
         </div>
 
-        <div className="space-y-1 border-t border-white/20 pt-4">
+        <div className="space-y-1 border-t border-gray-100 pt-4">
           <button className="flex w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-white/30 hover:text-slate-900">
             <Settings className="h-4 w-4 text-slate-500" />
             Settings

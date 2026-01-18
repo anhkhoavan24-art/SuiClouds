@@ -8,7 +8,15 @@ import {
   uploadToWalrus,
   getWalrusUrl,
   deleteFromWalrus,
+  getWalrusCanUrl,
 } from "../services/walrusService";
+import WalrusUploadDemo from "../components/WalrusUploadDemo";
+import {
+  getAllFilesFromDB,
+  addFileToDB,
+  updateFileInDB,
+  deleteFileFromDB,
+} from "../services/dbService";
 
 // Mock initial data
 const INITIAL_FILES: StoredFile[] = [
@@ -97,8 +105,13 @@ const Dashboard: React.FC = () => {
         trashed: false,
         // Create object URL for immediate preview
         url: URL.createObjectURL(file),
+        // set aggregator direct access and walruscan explorer link
+        walrusUrl: getWalrusUrl(blobId),
+        explorerUrl: getWalrusCanUrl(blobId),
       };
 
+      // persist to DB
+      await addFileToDB(newFile);
       setFiles((prev) => [newFile, ...prev]);
     } catch (error) {
       console.error("Critical Upload process failed:", error);
@@ -108,6 +121,34 @@ const Dashboard: React.FC = () => {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
+
+  // Load files from IndexedDB on mount
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const stored = await getAllFilesFromDB();
+        if (stored && stored.length > 0) {
+          setFiles(
+            stored.sort(
+              (a, b) => +new Date(b.uploadDate) - +new Date(a.uploadDate),
+            ),
+          );
+        } else {
+          // seed initial files into DB
+          for (const f of INITIAL_FILES) {
+            try {
+              await addFileToDB(f);
+            } catch (e) {
+              // ignore individual errors
+            }
+          }
+          setFiles(INITIAL_FILES);
+        }
+      } catch (err) {
+        console.warn("Failed to load from DB, using memory state", err);
+      }
+    })();
+  }, []);
 
   return (
     <div className="flex h-full w-full">
@@ -129,8 +170,8 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <header className="flex h-20 items-center justify-between px-8 pt-4">
-          <div className="flex items-center gap-4 rounded-xl border border-white/30 bg-white/20 px-4 py-2 backdrop-blur-md transition-all focus-within:bg-white/40 focus-within:shadow-md">
-            <Search className="h-5 w-5 text-slate-500" />
+          <div className="flex items-center gap-3 rounded-md border border-gray-100 bg-white px-3 py-2 transition-all">
+            <Search className="h-4 w-4 text-slate-400" />
             <input
               type="text"
               placeholder="Search in Drive"
@@ -139,9 +180,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="rounded-full bg-white/20 p-2 text-slate-600 hover:bg-white/40">
-              <Bell className="h-5 w-5" />
-            </button>
+            {/* Notifications intentionally minimized for a cleaner UI */}
             <div className="flex items-center gap-3 rounded-full bg-white/30 p-1 pl-4 pr-1 backdrop-blur-md">
               <span className="text-sm font-semibold text-slate-700">
                 {currentUser?.displayName || "User"}
@@ -149,7 +188,7 @@ const Dashboard: React.FC = () => {
               <img
                 src={currentUser?.photoURL || "https://picsum.photos/200"}
                 alt="Profile"
-                className="h-8 w-8 rounded-full border border-white shadow-sm"
+                className="h-7 w-7 rounded-full border border-gray-100"
               />
             </div>
           </div>
@@ -161,25 +200,26 @@ const Dashboard: React.FC = () => {
             <h2 className="mb-4 text-2xl font-bold text-slate-800">
               Welcome to SuiCloud
             </h2>
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sui-600 to-sui-400 p-8 text-white shadow-xl">
+            <div className="relative overflow-hidden rounded-lg bg-white/80 p-6 text-slate-800 border border-gray-100">
               <div className="relative z-10">
-                <h3 className="text-xl font-bold">
+                <h3 className="text-lg font-semibold">
                   Secure Decentralized Storage
                 </h3>
-                <p className="mt-2 max-w-lg text-sui-50 opacity-90">
-                  Your files are stored permanently on the Walrus Protocol.
-                  Experience the future of cloud storage with zero compromises.
+                <p className="mt-2 max-w-lg text-slate-600">
+                  Files stored on Walrus Protocol. Simple, durable, and private.
                 </p>
                 <button
                   onClick={handleUploadClick}
-                  className="mt-6 rounded-lg bg-white px-5 py-2 text-sm font-bold text-sui-600 shadow-lg transition-transform hover:scale-105 active:scale-95"
+                  className="mt-4 rounded-md bg-sui-600 px-4 py-2 text-sm font-semibold text-white"
                 >
                   Start Uploading
                 </button>
               </div>
-              <CloudDecoration />
             </div>
           </div>
+
+          {/* Demo UI for interactive walrus writeFilesFlow */}
+          <WalrusUploadDemo />
 
           <div className="mb-6 flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-700">
@@ -218,43 +258,94 @@ const Dashboard: React.FC = () => {
               if (view === "trash") return files.filter((f) => f.trashed);
               return files.filter((f) => !f.trashed);
             })()}
-            onToggleStar={(id: string) => {
+            onToggleStar={async (id: string) => {
               setFiles((prev) =>
                 prev.map((f) =>
                   f.id === id ? { ...f, starred: !f.starred } : f,
                 ),
               );
+              try {
+                const target = files.find((f) => f.id === id);
+                if (target)
+                  await updateFileInDB(id, { starred: !target.starred });
+              } catch (e) {
+                console.warn("Failed to persist star state", e);
+              }
             }}
-            onTrash={(id: string) => {
+            onTrash={async (id: string) => {
               setFiles((prev) =>
                 prev.map((f) => (f.id === id ? { ...f, trashed: true } : f)),
               );
+              try {
+                await updateFileInDB(id, { trashed: true });
+              } catch (e) {
+                console.warn("Failed to persist trash state", e);
+              }
             }}
-            onRestore={(id: string) => {
+            onRestore={async (id: string) => {
               setFiles((prev) =>
                 prev.map((f) => (f.id === id ? { ...f, trashed: false } : f)),
               );
+              try {
+                await updateFileInDB(id, { trashed: false });
+              } catch (e) {
+                console.warn("Failed to persist restore state", e);
+              }
             }}
             onDeletePermanent={async (id: string) => {
-              // Find file to get blobId
               const target = files.find((f) => f.id === id);
-              if (!target) return;
-
-              const confirmed = window.confirm(
-                "Permanently delete this file? This action cannot be undone.",
+              console.debug(
+                "[Dashboard] Attempting permanent delete id=",
+                id,
+                "blobId=",
+                target?.blobId,
               );
-              if (!confirmed) return;
-
-              // Attempt to delete from Walrus (best-effort); remove locally regardless
               try {
-                if (target.blobId) {
+                if (target?.blobId) {
                   await deleteFromWalrus(target.blobId);
                 }
               } catch (err) {
                 console.warn("Permanent delete failed at network level", err);
               }
 
-              setFiles((prev) => prev.filter((f) => f.id !== id));
+              try {
+                const ok = await deleteFileFromDB(id);
+                console.debug("[Dashboard] deleteFileFromDB returned", ok);
+              } catch (e) {
+                console.warn("Failed to remove from local DB", e);
+              }
+
+              // Refresh local state from DB to ensure consistency
+              try {
+                const remaining = await getAllFilesFromDB();
+                console.debug(
+                  "[Dashboard] reloaded files count=",
+                  remaining.length,
+                );
+                setFiles(
+                  remaining.sort(
+                    (a, b) => +new Date(b.uploadDate) - +new Date(a.uploadDate),
+                  ),
+                );
+              } catch (e) {
+                // Fallback: update in-memory state if DB read fails
+                console.warn("Failed to reload files from DB after delete", e);
+                setFiles((prev) => prev.filter((f) => f.id !== id));
+              }
+
+              // Refresh local state from DB to ensure consistency
+              try {
+                const remaining = await getAllFilesFromDB();
+                setFiles(
+                  remaining.sort(
+                    (a, b) => +new Date(b.uploadDate) - +new Date(a.uploadDate),
+                  ),
+                );
+              } catch (e) {
+                // Fallback: update in-memory state if DB read fails
+                console.warn("Failed to reload files from DB after delete", e);
+                setFiles((prev) => prev.filter((f) => f.id !== id));
+              }
             }}
           />
         </main>

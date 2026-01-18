@@ -28,3 +28,32 @@
     background: rgba(14, 165, 233, 0.5);
   }
 }
+
+/* Subtle utility reductions for less visual noise */
+.reduced-shadow {
+  box-shadow: none !important;
+}
+
+.subtle-card {
+  background: rgba(255,255,255,0.8);
+  border: 1px solid rgba(0,0,0,0.04);
+}
+
+/* Global subtle background and typography tuning for calmer UI */
+body {
+  background-color: #f7f8fb;
+  color: #374151; /* slate-700 */
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+.muted {
+  color: #6b7280; /* slate-500 */
+}
+
+/* compact utilities */
+.compact-grid-gap {
+  gap: 0.5rem;
+}
+.compact-card-p {
+  padding: 0.5rem;
+}

@@ -20,6 +20,8 @@ export interface StoredFile {
   type: FileType;
   uploadDate: Date;
   url?: string; // For display purposes
+  walrusUrl?: string; // Aggregator URL (direct file access)
+  explorerUrl?: string; // Link to walruscan or other explorer with blobId
   starred?: boolean;
   trashed?: boolean;
   accessedAt?: Date;
