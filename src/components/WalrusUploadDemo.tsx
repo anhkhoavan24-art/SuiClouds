@@ -1,9 +1,8 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import {
   getWalrusUrl,
   demoRetrieveAndRead,
   uploadToWalrus,
-  simulateUploadTransaction,
 } from "../services/walrusService";
 
 const WalrusUploadDemo: React.FC = () => {
@@ -19,12 +18,8 @@ const WalrusUploadDemo: React.FC = () => {
   const [overallProgress, setOverallProgress] = useState<number>(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [results, setResults] = useState<any>(null);
-  const [planModalOpen, setPlanModalOpen] = useState(false);
-  const [planModalSim, setPlanModalSim] = useState<any | null>(null);
-  const [selectedPlanKey, setSelectedPlanKey] = useState<string | null>(null);
-  const planResolveRef = useRef<
-    ((value: { proceed: boolean; planKey?: string }) => void) | null
-  >(null);
+  // Pricing: fixed rate per MB (USD)
+  const PRICE_PER_MB_USD = 0.02; // fixed price per MB
 
   const addLog = (m: string) =>
     setLogs((l) => [...l, `${new Date().toLocaleTimeString()}: ${m}`]);
@@ -52,50 +47,14 @@ const WalrusUploadDemo: React.FC = () => {
     addLog(`Starting simple upload for ${selected.length} file(s)...`);
     setOverallProgress(0);
     const uploadedFiles: any[] = [];
-
     for (let i = 0; i < selected.length; i++) {
       const file = selected[i];
       const fileIndex = i;
-      let sim: any = null;
-      let chosenPlanKey: string | undefined = undefined;
+      // compute simple fixed price for this file
+      const sizeMB = Math.max(1, Math.ceil(file.size / 1_000_000));
+      const priceUSD = Number((PRICE_PER_MB_USD * sizeMB).toFixed(6));
       try {
-        // Simulate transaction and show estimated cost
-        try {
-          sim = await simulateUploadTransaction(file.size, { epochs: 1 });
-          // Open modal to choose plan and confirm
-          const choice = await new Promise<{
-            proceed: boolean;
-            planKey?: string;
-          }>((resolve) => {
-            setPlanModalSim(sim);
-            setSelectedPlanKey(
-              sim.recommended?.key ??
-                (sim.bundles && sim.bundles[0]?.key) ??
-                null,
-            );
-            setPlanModalOpen(true);
-            planResolveRef.current = resolve;
-          });
-          setPlanModalOpen(false);
-          setPlanModalSim(null);
-          planResolveRef.current = null;
-          if (!choice || !choice.proceed) {
-            addLog(`User cancelled upload for ${file.name}`);
-            setFileStates((s) =>
-              s.map((f, idx) =>
-                idx === fileIndex ? { ...f, status: "cancelled" } : f,
-              ),
-            );
-            continue;
-          }
-          // choice.planKey contains the selected plan
-          chosenPlanKey = choice.planKey;
-        } catch (e) {
-          // If simulation fails, continue with upload but log
-          addLog(
-            `Price simulation failed, proceeding with upload for ${file.name}`,
-          );
-        }
+        // no plan selection — use fixed pricing; UI shows bulk discount below
 
         setFileStates((s) =>
           s.map((f, idx) =>
@@ -104,15 +63,25 @@ const WalrusUploadDemo: React.FC = () => {
         );
         addLog(`Uploading ${file.name}...`);
 
-        // Use the simplified upload function which does not require a signer
-        const planToSend = chosenPlanKey ?? selectedPlanKey ?? undefined;
+        // If uploading many files, set a bulk plan identifier for the publisher (optional)
+        const bulkPlan =
+          selected.length >= 10
+            ? `bulk-10`
+            : selected.length >= 5
+              ? `bulk-5`
+              : undefined;
         const blobId = await uploadToWalrus(file, {
           identifier: file.name,
-          plan: planToSend,
+          plan: bulkPlan,
         });
 
         addLog(`Successfully uploaded ${file.name}. Blob ID: ${blobId}`);
-        uploadedFiles.push({ name: file.name, blobId, sim });
+        uploadedFiles.push({
+          name: file.name,
+          blobId,
+          size: file.size,
+          priceUSD,
+        });
         setFileStates((s) =>
           s.map((f, idx) =>
             idx === fileIndex ? { ...f, status: "uploaded", progress: 100 } : f,
@@ -148,6 +117,23 @@ const WalrusUploadDemo: React.FC = () => {
     }
   };
 
+  const totalSizeBytes = selected.reduce((a, f) => a + (f.size || 0), 0);
+  const totalSizeMB = Math.max(1, Math.ceil(totalSizeBytes / 1_000_000));
+  const estimatedTotalUSD = Number(
+    selected
+      .reduce(
+        (acc, f) =>
+          acc + PRICE_PER_MB_USD * Math.max(1, Math.ceil(f.size / 1_000_000)),
+        0,
+      )
+      .toFixed(6),
+  );
+  const bulkDiscount =
+    selected.length >= 10 ? 0.4 : selected.length >= 5 ? 0.2 : 0;
+  const discountedTotalUSD = Number(
+    (estimatedTotalUSD * (1 - bulkDiscount)).toFixed(6),
+  );
+
   return (
     <details
       className="mb-6 rounded-lg border border-slate-200 bg-white p-0 shadow-sm"
@@ -167,6 +153,32 @@ const WalrusUploadDemo: React.FC = () => {
             Upload Files
           </button>
         </div>
+
+        {selected.length > 0 && (
+          <div className="mt-4 rounded border bg-slate-50 p-3 text-sm">
+            <div className="font-medium">Pricing</div>
+            <div className="mt-1 text-xs text-slate-600">
+              Rate: ${PRICE_PER_MB_USD}/MB
+            </div>
+            <div className="mt-1 text-xs text-slate-600">
+              Files: {selected.length} · Total size: {totalSizeMB} MB
+            </div>
+            <div className="mt-2 text-sm">
+              {bulkDiscount > 0 ? (
+                <div className="text-green-700">
+                  Bulk discount applied: {Math.round(bulkDiscount * 100)}% off
+                </div>
+              ) : (
+                <div>
+                  No bulk discounts (upload 5+ or 10+ files for discounts)
+                </div>
+              )}
+            </div>
+            <div className="mt-2 font-semibold">
+              Estimated total: ${discountedTotalUSD}
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="col-span-1">
@@ -233,27 +245,10 @@ const WalrusUploadDemo: React.FC = () => {
                     <div className="mt-1 text-xs text-slate-500">
                       Blob: {r.blobId}
                     </div>
-                    {r.sim && (
-                      <div className="mt-2 text-xs text-slate-700">
-                        <div>
-                          Chosen plan:{" "}
-                          <strong>
-                            {r.sim.recommended?.name || r.sim.recommended?.key}
-                          </strong>
-                        </div>
-                        <div className="mt-1">
-                          Estimated:{" "}
-                          {r.sim.totalEstimatedSUI
-                            ? `${r.sim.totalEstimatedSUI} SUI`
-                            : ""}{" "}
-                          {r.sim.totalEstimatedSUI ? " (≈ " : ""}
-                          {r.sim.totalEstimatedSUI
-                            ? `$${r.sim.totalEstimatedUSD}`
-                            : ""}
-                          {r.sim.totalEstimatedSUI ? ")" : ""}
-                        </div>
-                      </div>
-                    )}
+                    <div className="mt-2 text-xs text-slate-700">
+                      <div>Size: {Math.round((r.size ?? 0) / 1024)} KB</div>
+                      <div>Price: {r.priceUSD ? `$${r.priceUSD}` : "—"}</div>
+                    </div>
                     <div className="mt-2">
                       <button
                         onClick={() => onRetrieve(r.blobId)}
@@ -268,70 +263,7 @@ const WalrusUploadDemo: React.FC = () => {
             )}
           </div>
         )}
-        {planModalOpen && planModalSim && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="w-full max-w-lg rounded bg-white p-4">
-              <h4 className="mb-2 text-lg font-semibold">Choose a plan</h4>
-              <div className="max-h-64 overflow-y-auto">
-                {planModalSim.bundles && planModalSim.bundles.length > 0 ? (
-                  <div className="space-y-2">
-                    {planModalSim.bundles.map((b: any) => (
-                      <label
-                        key={b.key}
-                        className="flex items-center gap-3 rounded border p-2"
-                      >
-                        <input
-                          type="radio"
-                          name="plan"
-                          checked={selectedPlanKey === b.key}
-                          onChange={() => setSelectedPlanKey(b.key)}
-                        />
-                        <div className="flex-1 text-sm">
-                          <div className="font-medium">{b.name}</div>
-                          <div className="text-xs text-slate-600">
-                            {b.priceUSD ? `$${b.priceUSD}` : "—"}{" "}
-                            {b.priceSUI ? `(${b.priceSUI} SUI)` : ""}
-                          </div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-slate-600">
-                    No plans available
-                  </div>
-                )}
-              </div>
-              <div className="mt-3 flex justify-end gap-2">
-                <button
-                  className="rounded border px-3 py-1 text-sm"
-                  onClick={() => {
-                    planResolveRef.current &&
-                      planResolveRef.current({ proceed: false });
-                    setPlanModalOpen(false);
-                    setPlanModalSim(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="rounded bg-slate-800 px-3 py-1 text-sm text-white"
-                  onClick={() => {
-                    planResolveRef.current &&
-                      planResolveRef.current({
-                        proceed: true,
-                        planKey: selectedPlanKey ?? undefined,
-                      });
-                    setPlanModalOpen(false);
-                    setPlanModalSim(null);
-                  }}
-                >
-                  Proceed
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Plan selection removed — fixed pricing with bulk discounts is used */}
       </div>
     </details>
   );
